@@ -1,0 +1,180 @@
+---
+title: "#notdying4wallstreet Sentiment Analysis & User/Hashtag Analysis"
+author: "Hana Yerin Lim"
+date: "1/17/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+```{r}
+library(readxl)
+library(dplyr)
+library(readr)
+a <- read_excel("TAGS-NotDying4WallStreet - Archive.xlsx")
+b <- read_csv("TAGS-ReopenAmerica - Archive.csv")
+a %>% arrange(desc(user_followers_count))
+```
+
+```{r message=FALSE, warning=FALSE}
+library(stringr)
+library(dplyr)
+library(ggplot2)
+words <- c() 
+for(i in 1:626){
+  words <- c(words, unique(str_extract_all(a$text, "#\\S+"))[[i]])
+}
+#unique(words) #735
+freq_hash <- table(words) %>% as.data.frame() %>% arrange(desc(Freq))
+temp <- freq_hash[-c(1,3, 13, 14), ]
+top20 <- temp[1:20, ]
+ggplot(top20, aes(x = reorder(words, Freq), y = Freq)) + geom_bar(stat="identity", aes(fill = Freq)) + coord_flip() + 
+  scale_fill_gradient2(mid = "skyblue", high = "red", midpoint = median(top20$Freq)) + 
+  ggtitle("Top 20 Hashtags Used Along #notdying4wallstreet") + 
+  xlab("Frequency") + ylab("Top 20 Hashtags")
+
+
+words <- c() 
+for(i in 1:length(unique(str_extract_all(b$text, "#\\S+")))){
+  words <- c(words, unique(str_extract_all(b$text, "#\\S+"))[[i]])
+}
+#unique(words) #735
+freq_hash <- table(words) %>% as.data.frame() %>% arrange(desc(Freq))
+temp <- freq_hash[-c(1, 9, 13, 15, 17, 23), ]
+top20 <- temp[1:20, ]
+ggplot(top20, aes(x = reorder(words, Freq), y = Freq)) + geom_bar(stat="identity", aes(fill = Freq)) + coord_flip() + 
+  scale_fill_gradient2(mid = "skyblue", high = "red", midpoint = median(top20$Freq)) + 
+  ggtitle("Top 20 Hashtags Used Along #reopenAmerica") + 
+  xlab("Frequency") + ylab("Top 20 Hashtags")
+```
+
+```{r}
+library(viridis)
+followers <- a %>% arrange(desc(user_followers_count)) %>% distinct(from_user, .keep_all = TRUE)
+# ggplot(followers[1:30, ], aes(x = reorder(from_user, user_followers_count), y = user_followers_count)) + geom_bar(stat="identity", aes(fill = user_followers_count)) + coord_flip() + 
+#   scale_fill_viridis_c(option = 'viridis', direction = -1) +
+#   ggtitle("Top 30 accounts with the most followers") + 
+#   xlab("Accounts") + ylab("Followers Amounts")
+
+library(treemap)
+followers$label <- paste(followers$from_user, followers$user_followers_count, sep = "\n")
+treemap(followers[1:20, ], index = "label", vSize = "user_followers_count", vColor = "user_followers_count", type = "value")
+```
+
+1. Ben Shapiro: American conservative political commentator and media host
+
+2. Naomi A Klein: Canadian author, social activist, and filmmaker known for her political analyses and criticism of corporate globalization and of capitalism.
+
+3. Eva Golinger: Venezuelan-American lawyer, writer and journalist.
+
+4. WE are teachers: teachers based on Texas 
+
+5. Jon Cooper: Canadian-American professional ice hockey coach
+
+6. Matthew VanDyke: American documentary filmmaker, revolutionary, and former journalist
+
+### Follower Friend ratio is not outputed 
+```{r, eval = FALSE}
+a$follower_friend_ratio <- round((a$user_followers_count/a$user_friends_count)*100, 4)
+a %>% arrange(desc(follower_friend_ratio))
+```
+
+```{r}
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+library("syuzhet")
+library("ggplot2")
+a_copy <- a
+x <- a_copy$text
+stopwords = readLines("stoplist - keywords-29a98930edd440581bf3b48c5a4e72cb.rtf.txt")
+TextDoc <- Corpus(VectorSource(a_copy$text))
+
+#Replacing "/", "@" and "|" with space
+toSpace <- content_transformer(function (x , pattern) gsub(pattern, " ", x))
+suppressWarnings(TextDoc <- tm_map(TextDoc, toSpace, "/"))
+suppressWarnings(TextDoc <- tm_map(TextDoc, toSpace, "@"))
+suppressWarnings(TextDoc <- tm_map(TextDoc, toSpace, "\\|"))
+# Convert the text to lower case
+suppressWarnings(TextDoc <- tm_map(TextDoc, content_transformer(tolower)))
+# Remove numbers
+suppressWarnings(TextDoc <- tm_map(TextDoc, removeNumbers))
+# Remove english common stopwords
+suppressWarnings(TextDoc <- tm_map(TextDoc, removeWords, stopwords))
+# Remove your own stop word
+# specify your custom stopwords as a character vector
+suppressWarnings(TextDoc <- tm_map(TextDoc, removeWords, c("RT", "notdying4wallstreet", "notdyingwallstreet", "https", "amp", "’", "peopl")) )
+# Remove punctuations
+suppressWarnings(TextDoc <- tm_map(TextDoc, removePunctuation))
+# Eliminate extra white spaces
+suppressWarnings(TextDoc <- tm_map(TextDoc, stripWhitespace))
+# Text stemming - which reduces words to their root form
+suppressWarnings(TextDoc <- tm_map(TextDoc, stemDocument))
+```
+
+# most frequent words 
+```{r}
+TextDoc_dtm <- TermDocumentMatrix(TextDoc)
+dtm_m <- as.matrix(TextDoc_dtm)
+# Sort by descearing value of frequency
+dtm_v <- sort(rowSums(dtm_m),decreasing=TRUE)
+dtm_d <- data.frame(word = names(dtm_v),freq=dtm_v)
+dtm_d <- dtm_d[-1, ]
+# Display the top 5 most frequent words
+head(dtm_d, 10)
+```
+
+# word association 
+```{r}
+findAssocs(TextDoc_dtm, terms = c("trump", "listen", "want","die","risk","live","american"), corlimit = 0.25)			
+```
+
+# sentiment analysis
+```{r}
+syuzhet_vector <- get_sentiment(x, method="syuzhet")
+```
+
+```{r}
+d <- get_nrc_sentiment(x)
+```
+
+```{r}
+td<-data.frame(t(d))
+#The function rowSums computes column sums across rows for each level of a grouping variable.
+td_new <- data.frame(rowSums(td[2:9262]))
+#Transformation and cleaning
+names(td_new)[1] <- "count"
+td_new <- cbind("sentiment" = rownames(td_new), td_new)
+rownames(td_new) <- NULL
+td_new2<-td_new[1:8,]
+#Plot One - count of words associated with each sentiment
+quickplot(sentiment, data=td_new2, weight=sort(count, decreasing = TRUE), geom="bar", fill=sentiment, ylab="count") + ggtitle("#notdying4wallstreet Sentiments")
+```
+
+```{r}
+# data from vader sentiment analysis 
+data1 <- read.csv("NotDying4WallStreet.csv")
+data1$Neutral <- (data1$Negative == "False") & (data1$Positive == "False")
+# Counts: data1 %>% group_by(Negative, Positive, Neutral) %>% summarise(counts = n())
+vader_data <- data.frame(sentiment = c("Negative", "Positive", "Neutral"), counts = c(4239, 2773, 2250), prop = c(round(4239/(4239+2773), 3)*100, round(2773/(4239+2773), 3)*100, "-"))
+ggplot(vader_data, aes(sentiment, counts, fill = sentiment)) + geom_bar(stat = "identity") +
+  geom_text(aes(label = counts, vjust = 1)) +
+  ggtitle("Bar Chart of #notdying4wallstreet Sentiment Counts")
+  
+ggplot(vader_data[-3,], aes("", prop, fill = sentiment)) + geom_bar(stat = "identity", color = "white") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(prop, "%")), position = position_stack(vjust = 0.5)) + 
+  ggtitle("Pie Chart of #notdying4wallstreet Sentiments Proportion") + 
+  theme(axis.text = element_blank(), axis.ticks = element_blank(), panel.grid  = element_blank())
+
+ggplot(data1, aes(x = compound)) + geom_histogram(color = "white", fill = "lightblue", binwidth = 0.1) + ggtitle("Histogram of Sentiment Compound")
+```
+
+Histogram of Sentiment Compound: Negative outnumbers positive compounds 
+
+source from: https://www.red-gate.com/simple-talk/sql/bi/text-mining-and-sentiment-analysis-with-r/
